@@ -4,13 +4,13 @@ import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyDqHA-YZeimyr4pGHjuj_Iw8tqlOu_M0PI",
-  authDomain: "aeman-b14d6.firebaseapp.com",
-  projectId: "aeman-b14d6",
-  storageBucket: "aeman-b14d6.firebasestorage.app",
-  messagingSenderId: "255778871842",
-  appId: "1:255778871842:web:3420864363a7457c17887b",
-  measurementId: "G-Y6NSGEE2VV"
+  apiKey: import.meta.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: import.meta.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: import.meta.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase
@@ -25,7 +25,7 @@ try {
 }
 
 // Vapid key for web push notifications
-const vapidKey = "BDp_ZAdWjQKN_HOyI21VCRuSY8WOUZOXfDMF9_T8-7hg9DiJOYN6tVsPkabx5UMqmX6oi0mBSlzgxFRCFPw4j7A";
+const vapidKey = import.meta.env.REACT_APP_FIREBASE_VAPID_KEY;
 
 export { messaging, vapidKey };
 export default app;

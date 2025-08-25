@@ -13,7 +13,7 @@ try {
 
     firebaseAdmin = admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
-      projectId: 'aeman-b14d6'
+      projectId: process.env.FIREBASE_PROJECT_ID
     });
     
     messaging = admin.messaging();
