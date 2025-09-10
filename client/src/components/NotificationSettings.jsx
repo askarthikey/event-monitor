@@ -7,12 +7,15 @@ const NotificationSettings = ({ onClose }) => {
   const [isSupported, setIsSupported] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [registrationStatus, setRegistrationStatus] = useState('unknown');
+  const [isFirstTime, setIsFirstTime] = useState(false);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   useEffect(() => {
     // Check initial state
     setIsSupported(notificationService.isNotificationSupported());
     setPermission(notificationService.getPermissionStatus());
     setToken(notificationService.getCurrentToken());
+    setIsFirstTime(notificationService.isFirstTimeNotification());
     
     // Check if user is registered
     checkRegistrationStatus();
@@ -29,15 +32,25 @@ const NotificationSettings = ({ onClose }) => {
 
   const handleEnableNotifications = async () => {
     setIsLoading(true);
+    const wasFirstTime = notificationService.isFirstTimeNotification();
+    
     try {
       console.log('🔔 Enabling notifications...');
       const success = await notificationService.init();
       if (success) {
         setPermission(notificationService.getPermissionStatus());
         setToken(notificationService.getCurrentToken());
+        setIsFirstTime(notificationService.isFirstTimeNotification());
         
         // Recheck registration status
         await checkRegistrationStatus();
+        
+        // Show success message if this was the first time
+        if (wasFirstTime) {
+          setShowSuccessMessage(true);
+          // Auto-hide success message after 5 seconds
+          setTimeout(() => setShowSuccessMessage(false), 5000);
+        }
         
         console.log('✅ Notifications enabled and user registered!');
       } else {
@@ -99,6 +112,33 @@ const NotificationSettings = ({ onClose }) => {
           </div>
         </div>
 
+        {/* Success Message for First Time */}
+        {showSuccessMessage && (
+          <div className="mx-6 mb-4 bg-green-50 border border-green-200 rounded-xl p-4">
+            <div className="flex items-start space-x-3">
+              <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center mt-0.5">
+                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-green-800">🔔 Notifications Enabled!</h4>
+                <p className="text-sm text-green-700 mt-1">
+                  Notifications enabled only once for first time. You will now receive AI event alerts even when the website is closed.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowSuccessMessage(false)}
+                className="w-5 h-5 text-green-600 hover:text-green-800 transition-colors"
+              >
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Content */}
         <div className="p-6 space-y-6">
           {!isSupported ? (
@@ -146,6 +186,25 @@ const NotificationSettings = ({ onClose }) => {
                 </div>
               </div>
 
+              {/* First Time User Info */}
+              {isFirstTime && permission !== 'granted' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <div className="flex items-start space-x-3">
+                    <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center mt-0.5">
+                      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-blue-800">First Time Setup</h4>
+                      <p className="text-sm text-blue-700 mt-1">
+                        This will be your first time enabling notifications. You'll receive a welcome notification to confirm everything is working properly.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Notification Types */}
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold text-black">You'll receive notifications for:</h3>
@@ -185,7 +244,14 @@ const NotificationSettings = ({ onClose }) => {
                         <span>Enabling...</span>
                       </span>
                     ) : (
-                      'Enable Notifications'
+                      <span className="flex items-center justify-center space-x-2">
+                        <span>{isFirstTime ? '🔔 Enable Notifications (First Time)' : 'Enable Notifications'}</span>
+                        {isFirstTime && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            New
+                          </span>
+                        )}
+                      </span>
                     )}
                   </button>
                 )}

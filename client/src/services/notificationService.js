@@ -143,13 +143,19 @@ class NotificationService {
 				const data = await response.json();
 				console.log("✅ Successfully registered for notifications:", data);
 
-				// Show a success notification to user
-				if (Notification.permission === "granted") {
+				// Check if this is the first time enabling notifications
+				const hasShownWelcome = localStorage.getItem("notifications_welcome_shown");
+				
+				// Show a success notification to user only on first time
+				if (Notification.permission === "granted" && !hasShownWelcome) {
 					new Notification("🔔 Notifications Enabled!", {
-						body: "You will now receive AI event alerts even when the website is closed.",
+						body: "Notifications enabled only once for first time. You will now receive AI event alerts even when the website is closed.",
 						icon: "/favicon.ico",
 						tag: "registration-success",
 					});
+					
+					// Mark that we've shown the welcome notification
+					localStorage.setItem("notifications_welcome_shown", "true");
 				}
 
 				return true;
@@ -320,6 +326,11 @@ class NotificationService {
 			console.error("Error checking registration status:", error);
 			return false;
 		}
+	}
+
+	// Check if this is the first time enabling notifications
+	isFirstTimeNotification() {
+		return !localStorage.getItem("notifications_welcome_shown");
 	}
 
 	// Force re-registration (useful for debugging or refreshing token)
