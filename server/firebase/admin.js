@@ -10,8 +10,19 @@ try {
   if (!admin.apps.length) {
     let serviceAccount;
     
-    // Try to use environment variables first (more secure)
-    if (process.env.FIREBASE_PRIVATE_KEY) {
+    // For production deployment (Render), use Base64 encoded service account
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+      try {
+        const serviceAccountJson = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8');
+        serviceAccount = JSON.parse(serviceAccountJson);
+        console.log('🔑 Using Base64 encoded service account from environment variable');
+      } catch (error) {
+        console.error('❌ Failed to decode Base64 service account:', error.message);
+        throw error;
+      }
+    }
+    // Try to use individual environment variables (alternative method)
+    else if (process.env.FIREBASE_PRIVATE_KEY) {
       serviceAccount = {
         type: "service_account",
         project_id: process.env.FIREBASE_PROJECT_ID,
@@ -24,10 +35,13 @@ try {
         auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
         client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${process.env.FIREBASE_CLIENT_EMAIL}`
       };
-    } else {
-      // Fallback to service account file
+      console.log('🔑 Using individual environment variables for service account');
+    } 
+    // Fallback to service account file (development only)
+    else {
       const serviceAccountPath = path.join(__dirname, 'service-account-key.json');
       serviceAccount = require(serviceAccountPath);
+      console.log('🔑 Using local service account file (development mode)');
     }
 
     firebaseAdmin = admin.initializeApp({

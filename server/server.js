@@ -96,6 +96,26 @@ mongoClient
 		app.use("/api/events", eventRoutes);
 		app.use("/api/notifications", notificationRoutes);
 
+		// Health check endpoint for deployment platforms
+		app.get('/health', (req, res) => {
+			res.status(200).json({
+				status: 'healthy',
+				timestamp: new Date().toISOString(),
+				uptime: process.uptime(),
+				environment: process.env.NODE_ENV || 'development',
+				database: 'connected'
+			});
+		});
+
+		// Root endpoint
+		app.get('/', (req, res) => {
+			res.status(200).json({
+				message: 'AI Event Monitoring API',
+				version: '1.0.0',
+				status: 'running'
+			});
+		});
+
 		// // AI Processing Endpoints
 		// // --- Person Count Detection Endpoint ---
 		// app.post("/api/ai/count", aiUpload.single("image"), async (req, res) => {
