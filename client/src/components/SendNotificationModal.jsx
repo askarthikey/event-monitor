@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import apiService from "../services/apiService";
 
 const SendNotificationModal = ({ isOpen, onClose }) => {
 	const [registeredUsers, setRegisteredUsers] = useState([]);
@@ -16,40 +17,19 @@ const SendNotificationModal = ({ isOpen, onClose }) => {
 
 	const fetchRegisteredUsers = async () => {
 		try {
-			const token = localStorage.getItem("token");
-			const response = await fetch(
-				"http://localhost:4000/api/notifications/registered-users",
-				{
-					headers: {
-						Authorization: `Bearer ${token}`,
-					},
-				}
-			);
+			const response = await apiService.getRegisteredUsers();
 			const data = await response.json();
 			if (data.success) {
 				setRegisteredUsers(data.users);
 			}
 		} catch (error) {
-			console.error("Error fetching users:", error);
+			console.error("Error fetching registered users:", error);
 		}
 	};
 
 	const generateTestToken = async () => {
 		try {
-			const token = localStorage.getItem("token");
-			const response = await fetch(
-				"http://localhost:4000/api/notifications/generate-test-token",
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Authorization: `Bearer ${token}`,
-					},
-					body: JSON.stringify({
-						deviceName: "test-device",
-					}),
-				}
-			);
+			const response = await apiService.generateTestToken();
 
 			const data = await response.json();
 			if (data.success) {
@@ -77,25 +57,16 @@ const SendNotificationModal = ({ isOpen, onClose }) => {
 
 		setLoading(true);
 		try {
-			const token = localStorage.getItem("token");
-
-			let endpoint, body;
+			let response;
 			if (sendMode === "broadcast") {
-				endpoint = "http://localhost:4000/api/notifications/broadcast";
-				body = { title, body: message };
+				response = await apiService.broadcastNotification({ title, body: message });
 			} else {
-				endpoint = "http://localhost:4000/api/notifications/send-to-user";
-				body = { targetUsername: selectedUser, title, body: message };
+				response = await apiService.sendUserNotification({ 
+					targetUsername: selectedUser, 
+					title, 
+					body: message 
+				});
 			}
-
-			const response = await fetch(endpoint, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${token}`,
-				},
-				body: JSON.stringify(body),
-			});
 
 			const data = await response.json();
 			if (data.success) {

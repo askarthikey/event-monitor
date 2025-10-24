@@ -14,12 +14,7 @@ const cors = require("cors");
 
 // Create HTTP server and Socket.io instance
 const server = http.createServer(app);
-const io = socketIo(server, {
-	cors: {
-		origin: ["http://localhost:3000", "http://localhost:5173"],
-		methods: ["GET", "POST"],
-	},
-});
+const io = socketIo(server);
 
 app.use(cors());
 app.use(exp.json());
@@ -147,8 +142,9 @@ mongoClient
 		// });
 
 		// Start the server after everything is set up
-		server.listen(4000, () => {
-			console.log("Server is running on port 4000");
+		const PORT = process.env.PORT || 4000;
+		server.listen(PORT, () => {
+			console.log(`Server is running on port ${PORT}`);
 			console.log("🚀 WebSocket server active for real-time chat");
 			console.log("🚀 AI processing endpoints available at:");
 			console.log("  - POST /api/ai/count (person counting)");

@@ -1,5 +1,7 @@
 import { messaging, vapidKey } from "../firebase/config";
-import { getToken, onMessage } from "firebase/messaging";
+import { initializeApp } from "firebase/app";
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import apiService from "./apiService";
 
 class NotificationService {
 	constructor() {
@@ -127,17 +129,7 @@ class NotificationService {
 				return false;
 			}
 
-			const response = await fetch(
-				"http://localhost:4000/api/notifications/register",
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Authorization: `Bearer ${authToken}`,
-					},
-					body: JSON.stringify({ fcmToken: token }),
-				}
-			);
+			const response = await apiService.registerForNotifications({ fcmToken: token });
 
 			if (response.ok) {
 				const data = await response.json();
@@ -226,17 +218,7 @@ class NotificationService {
 	// Send test notification
 	async sendTestNotification() {
 		try {
-			const authToken = localStorage.getItem("token");
-			const response = await fetch(
-				"http://localhost:4000/api/notifications/test",
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Authorization: `Bearer ${authToken}`,
-					},
-				}
-			);
+			const response = await apiService.testNotification();
 
 			if (response.ok) {
 				console.log("Test notification sent");
@@ -254,24 +236,13 @@ class NotificationService {
 	// Send AI detection notification
 	async sendAIDetectionNotification(eventId, detectionData) {
 		try {
-			const authToken = localStorage.getItem("token");
-			const response = await fetch(
-				"http://localhost:4000/api/notifications/ai-detection",
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Authorization: `Bearer ${authToken}`,
-					},
-					body: JSON.stringify({
-						eventId,
-						detectionType: detectionData.type, // 'fire', 'smoke', 'overcrowd', etc.
-						probability: detectionData.probability,
-						timestamp: new Date().toISOString(),
-						location: detectionData.location || "Unknown",
-					}),
-				}
-			);
+			const response = await apiService.sendAIDetectionNotification({
+				eventId,
+				detectionType: detectionData.type, // 'fire', 'smoke', 'overcrowd', etc.
+				probability: detectionData.probability,
+				timestamp: new Date().toISOString(),
+				location: detectionData.location || "Unknown",
+			});
 
 			if (response.ok) {
 				console.log("AI detection notification sent");
@@ -307,14 +278,7 @@ class NotificationService {
 			const authToken = localStorage.getItem("token");
 			if (!authToken) return false;
 
-			const response = await fetch(
-				"http://localhost:4000/api/notifications/registered-users",
-				{
-					headers: {
-						Authorization: `Bearer ${authToken}`,
-					},
-				}
-			);
+			const response = await apiService.getRegisteredUsers();
 
 			if (response.ok) {
 				const data = await response.json();

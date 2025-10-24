@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import apiService from "../services/apiService";
 import AddEventModal from "./AddEventModal";
 import NotificationSettings from "./NotificationSettings";
 import SendNotificationModal from "./SendNotificationModal";
@@ -107,12 +108,7 @@ const Events = () => {
 				return;
 			}
 
-			const response = await fetch("http://localhost:4000/api/events", {
-				headers: {
-					Authorization: `Bearer ${token}`,
-					"Content-Type": "application/json",
-				},
-			});
+			const response = await apiService.getEvents();
 
 			if (response.ok) {
 				const eventsData = await response.json();
@@ -276,16 +272,7 @@ const Events = () => {
 
 			console.log(`Fetching logs for event: ${eventId}`);
 
-			const response = await fetch(
-				`http://localhost:4000/api/events/${eventId}/logs`,
-				{
-					headers: {
-						Authorization: `Bearer ${token}`,
-						"Content-Type": "application/json",
-						"Cache-Control": "no-cache",
-					},
-				}
-			);
+			const response = await apiService.getEventLogs(eventId);
 
 			console.log(`Response status: ${response.status}`);
 
@@ -435,14 +422,7 @@ const Events = () => {
 				JSON.stringify(eventData.additionalOrganizers || [])
 			);
 
-			const response = await fetch("http://localhost:4000/api/events", {
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${token}`,
-					// Don't set Content-Type for FormData, let browser set it with boundary
-				},
-				body: formData,
-			});
+			const response = await apiService.createEvent(formData);
 
 			if (response.ok) {
 				const result = await response.json();
