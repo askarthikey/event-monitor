@@ -14,9 +14,17 @@ const cors = require("cors");
 
 // Create HTTP server and Socket.io instance
 const server = http.createServer(app);
-const io = socketIo(server);
+const corsOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ["https://event-monitoring-omega.vercel.app", "http://localhost:3000", "http://localhost:5173"];
+const io = socketIo(server, {
+	cors: {
+		origin: corsOrigins,
+		methods: ["GET", "POST"],
+	},
+});
 
-app.use(cors());
+app.use(cors({
+	origin: corsOrigins
+}));
 app.use(exp.json());
 
 // Configure multer for AI processing endpoints

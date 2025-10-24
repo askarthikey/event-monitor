@@ -3,7 +3,7 @@
  * Uses environment variables for dynamic URL configuration
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:4000';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://event-monitoring.onrender.com';
 
 class ApiService {
   constructor() {
