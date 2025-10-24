@@ -14,10 +14,16 @@ try {
     if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
       try {
         const serviceAccountJson = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8');
+        console.log('🔑 Decoded service account length:', serviceAccountJson.length);
+        console.log('🔑 First 50 chars:', serviceAccountJson.substring(0, 50));
+        
         serviceAccount = JSON.parse(serviceAccountJson);
         console.log('🔑 Using Base64 encoded service account from environment variable');
+        console.log('🔑 Project ID:', serviceAccount.project_id);
       } catch (error) {
         console.error('❌ Failed to decode Base64 service account:', error.message);
+        console.log('📝 Base64 string length:', process.env.FIREBASE_SERVICE_ACCOUNT_BASE64?.length || 0);
+        console.log('📝 First 100 chars of Base64:', process.env.FIREBASE_SERVICE_ACCOUNT_BASE64?.substring(0, 100) || 'undefined');
         throw error;
       }
     }
@@ -39,9 +45,14 @@ try {
     } 
     // Fallback to service account file (development only)
     else {
-      const serviceAccountPath = path.join(__dirname, 'service-account-key.json');
-      serviceAccount = require(serviceAccountPath);
-      console.log('🔑 Using local service account file (development mode)');
+      try {
+        const serviceAccountPath = path.join(__dirname, 'service-account-key.json');
+        serviceAccount = require(serviceAccountPath);
+        console.log('🔑 Using local service account file (development mode)');
+      } catch (fileError) {
+        console.warn('⚠️ No Firebase service account found, using fallback mode');
+        throw new Error('No Firebase credentials available');
+      }
     }
 
     firebaseAdmin = admin.initializeApp({
