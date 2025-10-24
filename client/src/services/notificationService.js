@@ -57,10 +57,61 @@ class NotificationService {
 				"/firebase-messaging-sw.js"
 			);
 			console.log("Service Worker registered successfully:", registration);
+			
+			// Send Firebase config to service worker
+			await this.sendConfigToServiceWorker(registration);
+			
 			return registration;
 		} catch (error) {
 			console.error("Service Worker registration failed:", error);
 			throw error;
+		}
+	}
+
+	// Send Firebase configuration to service worker
+	async sendConfigToServiceWorker(registration) {
+		try {
+			// Get Firebase config from environment variables
+			const firebaseConfig = {
+				apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+				authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+				projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+				storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+				messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+				appId: import.meta.env.VITE_FIREBASE_APP_ID,
+				measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+			};
+
+			console.log('🔧 Sending Firebase config to service worker:', firebaseConfig.projectId);
+
+			// Wait for service worker to be ready
+			await registration.update();
+			
+			// Send config to service worker
+			if (registration.active) {
+				registration.active.postMessage({
+					type: 'FIREBASE_CONFIG',
+					config: firebaseConfig
+				});
+				console.log('✅ Firebase config sent to service worker');
+			} else {
+				console.warn('⚠️ Service worker not active, config will be sent when ready');
+				// Listen for service worker to become active
+				registration.addEventListener('updatefound', () => {
+					const newWorker = registration.installing;
+					newWorker?.addEventListener('statechange', () => {
+						if (newWorker.state === 'activated') {
+							newWorker.postMessage({
+								type: 'FIREBASE_CONFIG',
+								config: firebaseConfig
+							});
+							console.log('✅ Firebase config sent to newly activated service worker');
+						}
+					});
+				});
+			}
+		} catch (error) {
+			console.error('❌ Error sending config to service worker:', error);
 		}
 	}
 

@@ -37,8 +37,8 @@ const EventChat = () => {
 		fetchEventDetails();
 
 		// Initialize socket connection
-		const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'https://event-monitoring.onrender.com';
-		const CLIENT_ORIGIN = process.env.REACT_APP_CLIENT_ORIGIN || 'https://event-monitoring-omega.vercel.app';
+		const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://event-monitoring.onrender.com';
+		const CLIENT_ORIGIN = import.meta.env.VITE_CLIENT_ORIGIN || 'https://event-monitoring-omega.vercel.app';
 		
 		const newSocket = io(SOCKET_URL, {
 			cors: {

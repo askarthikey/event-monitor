@@ -3,7 +3,9 @@
  * Uses environment variables for dynamic URL configuration
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://event-monitoring.onrender.com';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://event-monitoring.onrender.com';
+
+console.log('🌐 API Service initialized with base URL:', API_BASE_URL);
 
 class ApiService {
   constructor() {
