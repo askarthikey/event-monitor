@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import apiService from "../services/apiService";
 
 const SignUp = () => {
 	const [formData, setFormData] = useState({
@@ -64,19 +65,10 @@ const SignUp = () => {
 			setErrors({});
 
 			try {
-				const response = await fetch(
-					"http://localhost:4000/api/users/register",
-					{
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-						},
-						body: JSON.stringify({
-							username: formData.username,
-							password: formData.password,
-						}),
-					}
-				);
+				const response = await apiService.register({
+					username: formData.username,
+					password: formData.password,
+				});
 
 				const data = await response.json();
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import io from "socket.io-client";
+import apiService from "../services/apiService";
 
 const EventChat = () => {
 	const { eventId } = useParams();
@@ -36,9 +37,12 @@ const EventChat = () => {
 		fetchEventDetails();
 
 		// Initialize socket connection
-		const newSocket = io("http://localhost:4000", {
+		const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:4000';
+		const CLIENT_ORIGIN = process.env.REACT_APP_CLIENT_ORIGIN || 'http://localhost:3000';
+		
+		const newSocket = io(SOCKET_URL, {
 			cors: {
-				origin: "http://localhost:3000",
+				origin: CLIENT_ORIGIN,
 				methods: ["GET", "POST"],
 			},
 			transports: ["websocket", "polling"],
@@ -94,16 +98,7 @@ const EventChat = () => {
 
 	const fetchEventDetails = async () => {
 		try {
-			const token = localStorage.getItem("token");
-			const response = await fetch(
-				`http://localhost:4000/api/events/${eventId}`,
-				{
-					headers: {
-						Authorization: `Bearer ${token}`,
-						"Content-Type": "application/json",
-					},
-				}
-			);
+			const response = await apiService.getEvent(eventId);
 
 			if (response.ok) {
 				const eventData = await response.json();
@@ -125,16 +120,7 @@ const EventChat = () => {
 
 	const fetchMessages = async () => {
 		try {
-			const token = localStorage.getItem("token");
-			const response = await fetch(
-				`http://localhost:4000/api/events/${eventId}/messages`,
-				{
-					headers: {
-						Authorization: `Bearer ${token}`,
-						"Content-Type": "application/json",
-					},
-				}
-			);
+			const response = await apiService.getEventMessages(eventId);
 
 			if (response.ok) {
 				const data = await response.json();

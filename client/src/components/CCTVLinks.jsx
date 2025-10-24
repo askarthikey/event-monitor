@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import apiService from "../services/apiService";
 
 const CCTVLinks = () => {
 	const location = useLocation();
@@ -133,16 +134,7 @@ const CCTVLinks = () => {
 				formData.append("videoFile", videoFile);
 			}
 
-			const response = await fetch(
-				`http://localhost:4000/api/events/${event._id}/cctv-video`,
-				{
-					method: "PUT",
-					headers: {
-						Authorization: `Bearer ${token}`,
-					},
-					body: formData,
-				}
-			);
+			const response = await apiService.updateCCTVVideo(event._id, formData);
 
 			if (response.ok) {
 				const updatedEvent = await response.json();
