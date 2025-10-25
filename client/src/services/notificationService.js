@@ -53,10 +53,16 @@ class NotificationService {
 	// Register service worker
 	async registerServiceWorker() {
 		try {
+			// Add cache-busting parameter to force reload of service worker
+			const swVersion = '2.0.1'; // Match SW_VERSION in firebase-messaging-sw.js
 			const registration = await navigator.serviceWorker.register(
-				"/firebase-messaging-sw.js"
+				`/firebase-messaging-sw.js?v=${swVersion}`,
+				{ updateViaCache: 'none' } // Force check for updates
 			);
 			console.log("Service Worker registered successfully:", registration);
+			
+			// Force immediate update check
+			await registration.update();
 			
 			// Send Firebase config to service worker
 			await this.sendConfigToServiceWorker(registration);

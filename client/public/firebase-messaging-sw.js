@@ -3,8 +3,10 @@ importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
 // SERVICE WORKER VERSION - Update this to force cache refresh
-const SW_VERSION = '2.0.0';
-console.log('[SW] Service Worker Version:', SW_VERSION);
+const SW_VERSION = '2.0.1';
+console.log('[SW] 🚀🚀🚀 Service Worker Version:', SW_VERSION, '🚀🚀🚀');
+console.log('[SW] 📍 Service Worker Location:', self.location.href);
+console.log('[SW] 🌐 Service Worker Hostname:', self.location.hostname);
 
 // HARD-CODED DEPLOYED URLS - NEVER USE LOCALHOST IN PRODUCTION
 const DEPLOYED_URLS = {
@@ -38,9 +40,13 @@ self.addEventListener('message', (event) => {
 function getClientBaseUrl() {
   const hostname = self.location.hostname;
   
+  console.log('[SW] ========================================');
   console.log('[SW] ===== URL DETECTION START =====');
+  console.log('[SW] ========================================');
   console.log('[SW] Hostname:', hostname);
   console.log('[SW] Location:', self.location.href);
+  console.log('[SW] Protocol:', self.location.protocol);
+  console.log('[SW] Port:', self.location.port);
   
   // Check if we're actually running on localhost
   const isLocalhost = hostname === 'localhost' || 
@@ -48,28 +54,36 @@ function getClientBaseUrl() {
                      hostname === '0.0.0.0';
   
   console.log('[SW] Is Localhost:', isLocalhost);
+  console.log('[SW] Hostname includes "askarthikey.tech":', hostname.includes('askarthikey.tech'));
+  console.log('[SW] Hostname includes "vercel.app":', hostname.includes('vercel.app'));
+  
+  let selectedUrl = null;
   
   // If we're on localhost, use local URL
   if (isLocalhost) {
-    console.log('[SW] ✅ Using LOCALHOST URL');
-    return DEPLOYED_URLS.LOCAL;
+    selectedUrl = DEPLOYED_URLS.LOCAL;
+    console.log('[SW] ✅ DECISION: Using LOCALHOST URL');
   }
-  
   // If hostname contains custom domain, use it
-  if (hostname.includes('askarthikey.tech')) {
-    console.log('[SW] ✅ Using CUSTOM DOMAIN (askarthikey.tech)');
-    return DEPLOYED_URLS.PRIMARY;
+  else if (hostname.includes('askarthikey.tech')) {
+    selectedUrl = DEPLOYED_URLS.PRIMARY;
+    console.log('[SW] ✅ DECISION: Using CUSTOM DOMAIN (askarthikey.tech)');
   }
-  
   // If hostname contains vercel, use vercel URL
-  if (hostname.includes('vercel.app') || hostname.includes('event-monitoring-omega')) {
-    console.log('[SW] ✅ Using VERCEL URL');
-    return DEPLOYED_URLS.SECONDARY;
+  else if (hostname.includes('vercel.app') || hostname.includes('event-monitoring-omega')) {
+    selectedUrl = DEPLOYED_URLS.SECONDARY;
+    console.log('[SW] ✅ DECISION: Using VERCEL URL');
+  }
+  // DEFAULT: Always use primary deployed URL for any other case
+  else {
+    selectedUrl = DEPLOYED_URLS.PRIMARY;
+    console.log('[SW] ✅ DECISION: Using DEFAULT DEPLOYED URL (custom domain)');
   }
   
-  // DEFAULT: Always use primary deployed URL for any other case
-  console.log('[SW] ✅ Using DEFAULT DEPLOYED URL (custom domain)');
-  return DEPLOYED_URLS.PRIMARY;
+  console.log('[SW] 🎯 SELECTED URL:', selectedUrl);
+  console.log('[SW] ========================================');
+  
+  return selectedUrl;
 }
 
 // Initialize Firebase
