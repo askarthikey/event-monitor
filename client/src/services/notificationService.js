@@ -57,9 +57,9 @@ class NotificationService {
 			console.log('🧹 Checking for old service workers...');
 			const existingRegistrations = await navigator.serviceWorker.getRegistrations();
 			for (const reg of existingRegistrations) {
-				// Unregister old Firebase messaging service workers without version
+				// Unregister old Firebase messaging service workers without current version
 				if (reg.active?.scriptURL.includes('firebase-messaging-sw.js') && 
-				    !reg.active?.scriptURL.includes('v=2.0.1')) {
+				    !reg.active?.scriptURL.includes('v=2.1.0')) {
 					console.log('🗑️ Unregistering old service worker:', reg.scope);
 					await reg.unregister();
 				}
@@ -69,7 +69,7 @@ class NotificationService {
 			await new Promise(resolve => setTimeout(resolve, 500));
 			
 			// Add cache-busting parameter to force reload of service worker
-			const swVersion = '2.0.1'; // Match SW_VERSION in firebase-messaging-sw.js
+			const swVersion = '2.1.0'; // Match SW_VERSION in firebase-messaging-sw.js
 			const registration = await navigator.serviceWorker.register(
 				`/firebase-messaging-sw.js?v=${swVersion}`,
 				{ 
@@ -174,7 +174,21 @@ class NotificationService {
 		}
 
 		try {
-			const currentToken = await getToken(messaging, { vapidKey });
+			// Get the service worker registration we just created
+			const registration = await navigator.serviceWorker.getRegistration('/');
+			if (!registration) {
+				console.error("No service worker registration found!");
+				return null;
+			}
+			
+			console.log("🔧 Using service worker registration:", registration.scope);
+			
+			// Get token using OUR service worker registration (prevents Firebase from creating its own)
+			const currentToken = await getToken(messaging, { 
+				vapidKey,
+				serviceWorkerRegistration: registration // KEY: Use our existing registration!
+			});
+			
 			if (currentToken) {
 				console.log(
 					"FCM Registration token obtained:",

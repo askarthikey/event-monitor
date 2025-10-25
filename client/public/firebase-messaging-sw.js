@@ -3,7 +3,7 @@ importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
 // SERVICE WORKER VERSION - Update this to force cache refresh
-const SW_VERSION = '2.0.1';
+const SW_VERSION = '2.1.0';
 console.log('[SW] 🚀🚀🚀 Service Worker Version:', SW_VERSION, '🚀🚀🚀');
 console.log('[SW] 📍 Service Worker Location:', self.location.href);
 console.log('[SW] 🌐 Service Worker Hostname:', self.location.hostname);
