@@ -25,40 +25,66 @@ self.addEventListener('message', (event) => {
 
 // Get the correct base URL for the client
 function getClientBaseUrl() {
-  // If we have the current origin from the main thread, use it
-  if (currentOrigin) {
+  // ALWAYS prioritize deployed sites over localhost
+  const hostname = self.location.hostname;
+  
+  console.log('[SW] Detecting hostname:', hostname);
+  console.log('[SW] Full location:', self.location.href);
+  console.log('[SW] Current origin from main thread:', currentOrigin);
+  console.log('[SW] Client origins from env:', clientOrigins);
+  
+  // First priority: Use currentOrigin if it's a deployed URL (not localhost)
+  if (currentOrigin && !currentOrigin.includes('localhost')) {
+    console.log('[SW] Using current origin (deployed):', currentOrigin);
     return currentOrigin;
   }
   
-  // Use any provided client origins, prefer the first one or match current hostname
+  // Second priority: Match hostname with deployed domains (custom domain first)
+  if (hostname.includes('askarthikey.tech')) {
+    console.log('[SW] Detected custom domain deployment (priority)');
+    return 'https://event-monitor.askarthikey.tech';
+  }
+  
+  if (hostname.includes('vercel.app')) {
+    console.log('[SW] Detected Vercel deployment');
+    return 'https://event-monitoring-omega.vercel.app';
+  }
+  
+  // Third priority: Parse client origins for deployed URLs
   if (clientOrigins) {
     const originsArray = clientOrigins.split(',').map(o => o.trim());
-    const hostname = self.location.hostname;
+    console.log('[SW] Available origins:', originsArray);
     
-    // Try to match current hostname with one of the origins
+    // Find any deployed URL (not localhost)
     for (const origin of originsArray) {
-      if (origin.includes(hostname)) {
+      if (!origin.includes('localhost') && (origin.includes('https://') || origin.includes('http://'))) {
+        console.log('[SW] Using first deployed origin:', origin);
         return origin;
       }
     }
-    
-    // If no match, use the first origin
-    return originsArray[0];
   }
   
-  // Fallback: detect if we're on localhost or deployed
-  const hostname = self.location.hostname;
+  // Fourth priority: Hard-coded deployed URLs (safety net) - custom domain first
+  if (!hostname.includes('localhost') && !hostname.includes('127.0.0.1')) {
+    if (hostname.includes('askarthikey')) {
+      console.log('[SW] Fallback to custom domain URL (priority)');
+      return 'https://event-monitor.askarthikey.tech';
+    }
+    if (hostname.includes('vercel') || hostname.includes('event-monitoring')) {
+      console.log('[SW] Fallback to Vercel URL');
+      return 'https://event-monitoring-omega.vercel.app';
+    }
+  }
   
-  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('localhost')) {
+  // LAST resort: Only use localhost if we're actually on localhost
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    console.log('[SW] Using localhost (development mode)');
     return 'http://localhost:5173';
-  } else if (hostname.includes('vercel.app')) {
-    return 'https://event-monitoring-omega.vercel.app';
-  } else if (hostname.includes('askarthikey.tech')) {
-    return 'https://event-monitor.askarthikey.tech';
-  } else {
-    // Generic fallback
-    return self.location.origin;
   }
+  
+  // Ultimate fallback: Use first deployed URL (custom domain priority)
+  console.log('[SW] Ultimate fallback to custom domain URL');
+  return 'https://event-monitor.askarthikey.tech';
 }
 
 // Initialize Firebase
@@ -95,6 +121,13 @@ function setupBackgroundMessageHandler() {
   // Handle background messages
   messaging.onBackgroundMessage((payload) => {
     console.log('[SW] Received background message:', payload);
+    console.log('[SW] Payload data:', payload.data);
+    
+    // Determine the correct URL for this notification
+    const deployedUrl = payload.data?.forceDeployedUrl || 
+                       getClientBaseUrl();
+    
+    console.log('[SW] Using deployed URL for notification:', deployedUrl);
     
     const notificationTitle = payload.notification?.title || 'AI Event Monitor Alert';
     const notificationOptions = {
@@ -104,8 +137,9 @@ function setupBackgroundMessageHandler() {
       tag: 'ai-event-notification',
       data: {
         ...payload.data,
-        clientOrigins: clientOrigins, // Store supported client origins
-        currentOrigin: getClientBaseUrl() // Store the correct client URL
+        clientOrigins: clientOrigins,
+        currentOrigin: deployedUrl, // Use deployed URL
+        forceDeployedUrl: payload.data?.forceDeployedUrl || 'https://event-monitor.askarthikey.tech'
       },
       actions: [
         {
@@ -122,6 +156,7 @@ function setupBackgroundMessageHandler() {
       vibrate: [200, 100, 200]
     };
 
+    console.log('[SW] Notification options data:', notificationOptions.data);
     self.registration.showNotification(notificationTitle, notificationOptions);
   });
 }
@@ -129,14 +164,45 @@ function setupBackgroundMessageHandler() {
 // Handle notification click events
 self.addEventListener('notificationclick', (event) => {
   console.log('[firebase-messaging-sw.js] Notification click received.');
+  console.log('[SW] Notification data:', event.notification.data);
 
   event.notification.close();
 
-  // Get the base URL, prefer currentOrigin from notification data, then fallback
-  const baseUrl = event.notification.data?.currentOrigin || 
-                  event.notification.data?.clientOrigins?.split(',')[0]?.trim() || 
-                  getClientBaseUrl();
-  console.log('[SW] Using base URL for navigation:', baseUrl);
+  // Get the base URL with multiple fallbacks, NEVER use localhost for deployed notifications
+  let baseUrl = null;
+  
+  // Priority 1: Use forceDeployedUrl from server (always deployed URL)
+  if (event.notification.data?.forceDeployedUrl) {
+    baseUrl = event.notification.data.forceDeployedUrl;
+    console.log('[SW] Using forced deployed URL:', baseUrl);
+  }
+  // Priority 2: Use currentOrigin if it's not localhost
+  else if (event.notification.data?.currentOrigin && !event.notification.data.currentOrigin.includes('localhost')) {
+    baseUrl = event.notification.data.currentOrigin;
+    console.log('[SW] Using current origin (non-localhost):', baseUrl);
+  }
+  // Priority 3: Parse clientOrigins for deployed URLs
+  else if (event.notification.data?.clientOrigins) {
+    const origins = event.notification.data.clientOrigins.split(',').map(o => o.trim());
+    for (const origin of origins) {
+      if (!origin.includes('localhost')) {
+        baseUrl = origin;
+        console.log('[SW] Using client origin (non-localhost):', baseUrl);
+        break;
+      }
+    }
+  }
+  
+  // Priority 4: Use getClientBaseUrl() but ensure it's not localhost
+  if (!baseUrl) {
+    baseUrl = getClientBaseUrl();
+    if (baseUrl.includes('localhost')) {
+      baseUrl = 'https://event-monitor.askarthikey.tech'; // Force custom domain as priority
+      console.log('[SW] Forced custom domain URL as fallback:', baseUrl);
+    }
+  }
+
+  console.log('[SW] Final base URL for navigation:', baseUrl);
 
   if (event.action === 'view') {
     // Open the app to the specific event

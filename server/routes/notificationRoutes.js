@@ -51,7 +51,8 @@ const sendFirebaseNotification = async (fcmToken, notificationPayload) => {
       notification: notificationPayload.notification,
       data: {
         ...notificationPayload.data,
-        clientOrigins: process.env.CLIENT_ORIGIN || 'https://event-monitoring-omega.vercel.app,https://event-monitor.askarthikey.tech'
+        clientOrigins: process.env.CLIENT_ORIGIN || 'https://event-monitor.askarthikey.tech,https://event-monitoring-omega.vercel.app',
+        forceDeployedUrl: 'https://event-monitor.askarthikey.tech' // Custom domain has higher priority
       },
       webpush: {
         notification: {
