@@ -82,18 +82,28 @@ class NotificationService {
 				measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 			};
 
+			// Get the correct client origins for notifications (support multiple domains)
+			const clientOrigins = import.meta.env.VITE_CLIENT_ORIGIN || 'https://event-monitoring-omega.vercel.app,https://event-monitor.askarthikey.tech';
+			const currentOrigin = window.location.origin;
+
 			console.log('🔧 Sending Firebase config to service worker:', firebaseConfig.projectId);
+			console.log('🌐 Supported client origins:', clientOrigins);
+			console.log('🌐 Current origin:', currentOrigin);
 
 			// Wait for service worker to be ready
 			await registration.update();
 			
-			// Send config to service worker
+			// Send config to service worker with client origins
+			const configMessage = {
+				type: 'FIREBASE_CONFIG',
+				config: firebaseConfig,
+				clientOrigins: clientOrigins,
+				currentOrigin: currentOrigin
+			};
+			
 			if (registration.active) {
-				registration.active.postMessage({
-					type: 'FIREBASE_CONFIG',
-					config: firebaseConfig
-				});
-				console.log('✅ Firebase config sent to service worker');
+				registration.active.postMessage(configMessage);
+				console.log('✅ Firebase config and client origins sent to service worker');
 			} else {
 				console.warn('⚠️ Service worker not active, config will be sent when ready');
 				// Listen for service worker to become active
@@ -101,11 +111,8 @@ class NotificationService {
 					const newWorker = registration.installing;
 					newWorker?.addEventListener('statechange', () => {
 						if (newWorker.state === 'activated') {
-							newWorker.postMessage({
-								type: 'FIREBASE_CONFIG',
-								config: firebaseConfig
-							});
-							console.log('✅ Firebase config sent to newly activated service worker');
+							newWorker.postMessage(configMessage);
+							console.log('✅ Firebase config and client origins sent to newly activated service worker');
 						}
 					});
 				});
@@ -250,8 +257,12 @@ class NotificationService {
 
 			browserNotification.onclick = () => {
 				window.focus();
+				// Get the correct client origin
+				const clientOrigin = import.meta.env.VITE_CLIENT_ORIGIN || window.location.origin;
+				
 				// Navigate to specific event if eventId is provided
 				if (data?.eventId) {
+					// For foreground notifications, we can use relative paths since we're in the same origin
 					window.location.href = `/events/${data.eventId}/chat`;
 				} else {
 					window.location.href = "/events";
@@ -357,6 +368,51 @@ class NotificationService {
 			console.log("🔄 No token available, initializing notifications...");
 			return await this.init();
 		}
+	}
+
+	// Force service worker update and reconfiguration
+	async forceServiceWorkerUpdate() {
+		try {
+			console.log("🔄 Forcing service worker update...");
+			
+			// Unregister existing service worker
+			const registrations = await navigator.serviceWorker.getRegistrations();
+			for (const registration of registrations) {
+				if (registration.scope.includes('firebase-messaging-sw.js') || 
+					registration.active?.scriptURL.includes('firebase-messaging-sw.js')) {
+					console.log("🗑️ Unregistering existing Firebase service worker");
+					await registration.unregister();
+				}
+			}
+
+			// Wait a bit for cleanup
+			await new Promise(resolve => setTimeout(resolve, 1000));
+
+			// Re-register service worker
+			await this.registerServiceWorker();
+			
+			console.log("✅ Service worker force updated successfully");
+			return true;
+		} catch (error) {
+			console.error("❌ Error force updating service worker:", error);
+			return false;
+		}
+	}
+
+	// Debug environment information
+	getEnvironmentInfo() {
+		return {
+			hostname: window.location.hostname,
+			origin: window.location.origin,
+			clientOrigins: import.meta.env.VITE_CLIENT_ORIGIN,
+			isLocalhost: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1',
+			isVercel: window.location.hostname.includes('vercel.app'),
+			isCustomDomain: window.location.hostname.includes('askarthikey.tech'),
+			userAgent: navigator.userAgent,
+			notificationPermission: Notification.permission,
+			serviceWorkerSupported: 'serviceWorker' in navigator,
+			firebaseConfigured: this.isFirebaseConfigured
+		};
 	}
 }
 

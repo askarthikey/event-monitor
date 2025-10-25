@@ -29,11 +29,30 @@ const sendFirebaseNotification = async (fcmToken, notificationPayload) => {
       return { success: false, messageId: null, method: 'unavailable', error: 'Firebase Admin SDK not initialized' };
     }
 
+    // Validate FCM token format
+    if (!fcmToken || typeof fcmToken !== 'string' || fcmToken.trim().length === 0) {
+      throw new Error('Invalid FCM token provided');
+    }
+
+    // Check if it's a test token (should not be sent via Firebase)
+    if (fcmToken.startsWith('fake-fcm-token-')) {
+      console.log('🧪 Skipping Firebase send for test token:', fcmToken.substring(0, 30) + '...');
+      return { 
+        success: true, 
+        messageId: `test-message-${Date.now()}`, 
+        method: 'test-token-simulation',
+        note: 'Test token simulated successful delivery'
+      };
+    }
+
     const messaging = getMessaging();
     const message = {
       token: fcmToken,
       notification: notificationPayload.notification,
-      data: notificationPayload.data || {},
+      data: {
+        ...notificationPayload.data,
+        clientOrigins: process.env.CLIENT_ORIGIN || 'https://event-monitoring-omega.vercel.app,https://event-monitor.askarthikey.tech'
+      },
       webpush: {
         notification: {
           ...notificationPayload.notification,
@@ -59,11 +78,64 @@ const sendFirebaseNotification = async (fcmToken, notificationPayload) => {
     return { success: true, messageId, method: 'firebase-admin' };
   } catch (error) {
     console.error('❌ Error sending Firebase notification:', error);
+    
+    // Handle specific Firebase errors
+    let errorType = 'unknown';
+    let shouldRemoveToken = false;
+    
+    if (error.code) {
+      switch (error.code) {
+        case 'messaging/registration-token-not-registered':
+          errorType = 'token-not-registered';
+          shouldRemoveToken = true;
+          console.log('🗑️ FCM token not registered, should be removed from database');
+          break;
+        case 'messaging/invalid-registration-token':
+          errorType = 'invalid-token';
+          shouldRemoveToken = true;
+          console.log('🗑️ FCM token is invalid, should be removed from database');
+          break;
+        case 'messaging/invalid-argument':
+          // This includes invalid token format and "Requested entity was not found"
+          if (error.message.includes('registration token') || error.message.includes('not found')) {
+            errorType = 'invalid-token-format';
+            shouldRemoveToken = true;
+            console.log('🗑️ FCM token format is invalid or entity not found, should be removed from database');
+          } else {
+            errorType = 'invalid-payload';
+          }
+          break;
+        case 'messaging/invalid-payload':
+          errorType = 'empty-token';
+          shouldRemoveToken = true;
+          console.log('🗑️ Empty or null FCM token, should be removed from database');
+          break;
+        case 'messaging/mismatched-credential':
+          errorType = 'credential-mismatch';
+          console.log('🔑 Service account credentials mismatch with project');
+          break;
+        case 'messaging/authentication-error':
+          errorType = 'auth-error';
+          console.log('🔐 Firebase authentication error');
+          break;
+        default:
+          errorType = error.code;
+      }
+    } else if (error.message.includes('Requested entity was not found')) {
+      // Handle the specific error from the user's original problem
+      errorType = 'entity-not-found';
+      shouldRemoveToken = true;
+      console.log('🗑️ Requested entity was not found - token likely expired or invalid');
+    }
+    
     return { 
       success: false, 
       messageId: null, 
       method: 'firebase-admin-failed',
-      error: error.message 
+      error: error.message,
+      errorCode: error.code,
+      errorType,
+      shouldRemoveToken
     };
   }
 };
@@ -143,11 +215,25 @@ router.post('/test', authenticateToken, async (req, res) => {
     // Send real Firebase notification
     const result = await sendFirebaseNotification(userTokenData.fcmToken, notificationPayload);
 
+    // If token is invalid or not registered, remove it from database
+    if (result.shouldRemoveToken) {
+      console.log(`🗑️ Removing invalid FCM token for user ${userId}`);
+      await fcmTokensCollection.deleteOne({ userId });
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Your notification token has expired or is invalid. Please refresh the page and enable notifications again.',
+        error: result.error,
+        errorType: result.errorType,
+        action: 'token-removed'
+      });
+    }
+
     console.log(`Test notification sent to user ${userId}:`, result);
 
     res.json({ 
-      success: true, 
-      message: 'Test notification sent successfully',
+      success: result.success, 
+      message: result.success ? 'Test notification sent successfully' : 'Failed to send notification',
       payload: notificationPayload,
       firebaseResult: result
     });
@@ -222,6 +308,20 @@ router.post('/ai-detection', authenticateToken, async (req, res) => {
 
     // Send real Firebase notification
     const result = await sendFirebaseNotification(userTokenData.fcmToken, notificationPayload);
+
+    // If token is invalid or not registered, remove it from database
+    if (result.shouldRemoveToken) {
+      console.log(`🗑️ Removing invalid FCM token for user ${userId}`);
+      await fcmTokensCollection.deleteOne({ userId });
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Your AI detection notification token has expired or is invalid. Please refresh the page and enable notifications again.',
+        error: result.error,
+        errorType: result.errorType,
+        action: 'token-removed'
+      });
+    }
 
     console.log(`AI detection notification sent to user ${userId}:`, result);
 
@@ -322,6 +422,20 @@ router.post('/send-to-user', authenticateToken, async (req, res) => {
     // Send real Firebase notification
     const result = await sendFirebaseNotification(userTokenData.fcmToken, notificationPayload);
 
+    // If token is invalid, remove it and notify user
+    if (result.shouldRemoveToken) {
+      console.log(`🗑️ Removing invalid FCM token for user ${targetUsername}`);
+      await fcmTokensCollection.deleteOne({ userId: targetUsername });
+      
+      return res.status(400).json({
+        success: false,
+        message: `User ${targetUsername}'s notification token is invalid. They need to re-enable notifications.`,
+        error: result.error,
+        errorType: result.errorType,
+        action: 'token-removed'
+      });
+    }
+
     console.log(`Notification sent from ${req.user.username} to ${targetUsername}:`, result);
 
     // Store notification in history
@@ -421,6 +535,14 @@ router.post('/broadcast', authenticateToken, async (req, res) => {
         // Send real Firebase notification
         const result = await sendFirebaseNotification(tokenData.fcmToken, notificationPayload);
 
+        // If token is invalid, remove it and track failure
+        if (result.shouldRemoveToken) {
+          console.log(`🗑️ Removing invalid FCM token for user ${tokenData.userId}`);
+          await fcmTokensCollection.deleteOne({ userId: tokenData.userId });
+          failedNotifications.push(tokenData.userId);
+          continue;
+        }
+
         console.log(`Broadcast notification sent to ${tokenData.userId}:`, result);
 
         // Store notification in history
@@ -512,6 +634,163 @@ router.post('/generate-test-token', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error generating test token:', error);
     res.status(500).json({ message: 'Failed to generate test token' });
+  }
+});
+
+// Validate all FCM tokens and remove invalid ones
+router.post('/validate-tokens', authenticateToken, async (req, res) => {
+  try {
+    const fcmTokensCollection = getFcmTokensCollection(req);
+    const allTokens = await fcmTokensCollection.find({}).toArray();
+    
+    if (allTokens.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No tokens to validate',
+        results: { valid: 0, invalid: 0, test: 0 }
+      });
+    }
+
+    const results = {
+      valid: [],
+      invalid: [],
+      test: [],
+      removed: []
+    };
+
+    // Test each token with a simple validation message
+    for (const tokenData of allTokens) {
+      try {
+        // Skip test tokens but count them
+        if (tokenData.fcmToken.startsWith('fake-fcm-token-')) {
+          results.test.push(tokenData.userId);
+          continue;
+        }
+
+        const testPayload = {
+          notification: {
+            title: 'Token Validation',
+            body: 'Validating your notification token...',
+          },
+          data: {
+            type: 'validation',
+            timestamp: new Date().toISOString()
+          }
+        };
+
+        const result = await sendFirebaseNotification(tokenData.fcmToken, testPayload);
+
+        if (result.success) {
+          results.valid.push(tokenData.userId);
+        } else if (result.shouldRemoveToken) {
+          results.invalid.push(tokenData.userId);
+          // Remove invalid token
+          await fcmTokensCollection.deleteOne({ userId: tokenData.userId });
+          results.removed.push(tokenData.userId);
+          console.log(`🗑️ Removed invalid token for user ${tokenData.userId}`);
+        } else {
+          results.invalid.push(tokenData.userId);
+        }
+      } catch (error) {
+        console.error(`Error validating token for ${tokenData.userId}:`, error);
+        results.invalid.push(tokenData.userId);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Token validation completed',
+      results: {
+        valid: results.valid.length,
+        invalid: results.invalid.length,
+        test: results.test.length,
+        removed: results.removed.length
+      },
+      details: results
+    });
+  } catch (error) {
+    console.error('Error validating tokens:', error);
+    res.status(500).json({ message: 'Failed to validate tokens' });
+  }
+});
+
+// Debug route to check specific token format
+router.post('/debug-token', authenticateToken, async (req, res) => {
+  try {
+    const { token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({ message: 'Token is required' });
+    }
+
+    console.log('🔍 Debugging token:', token.substring(0, 50) + '...');
+    
+    // Basic format checks
+    const tokenInfo = {
+      length: token.length,
+      startsWithFake: token.startsWith('fake-fcm-token-'),
+      isEmpty: !token || token.trim().length === 0,
+      format: 'unknown'
+    };
+
+    // Try to identify token format
+    if (token.includes(':APA91b')) {
+      tokenInfo.format = 'FCM-Android';
+    } else if (token.includes('-') && token.length > 100) {
+      tokenInfo.format = 'FCM-Web';
+    } else if (token.startsWith('fake-fcm-token-')) {
+      tokenInfo.format = 'Test-Token';
+    }
+
+    // Try to send a test notification
+    const testPayload = {
+      notification: {
+        title: 'Debug Test',
+        body: 'Testing token format...',
+      },
+      data: {
+        type: 'debug',
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    const result = await sendFirebaseNotification(token, testPayload);
+
+    res.json({
+      success: true,
+      tokenInfo,
+      firebaseResult: result
+    });
+  } catch (error) {
+    console.error('Error debugging token:', error);
+    res.status(500).json({ message: 'Failed to debug token' });
+  }
+});
+
+// Debug environment information
+router.get('/debug-env', authenticateToken, async (req, res) => {
+  try {
+    const clientOrigins = process.env.CLIENT_ORIGIN ? process.env.CLIENT_ORIGIN.split(',').map(o => o.trim()) : [];
+    
+    const environmentInfo = {
+      nodeEnv: process.env.NODE_ENV,
+      clientOrigins: clientOrigins,
+      corsOrigins: process.env.CORS_ORIGINS,
+      firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
+      hasFirebaseServiceAccount: !!process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
+      firebaseAvailable: isFirebaseAvailable(),
+      timestamp: new Date().toISOString()
+    };
+
+    console.log('🔍 Environment debug requested:', environmentInfo);
+
+    res.json({
+      success: true,
+      environment: environmentInfo
+    });
+  } catch (error) {
+    console.error('Error getting environment info:', error);
+    res.status(500).json({ message: 'Failed to get environment info' });
   }
 });
 

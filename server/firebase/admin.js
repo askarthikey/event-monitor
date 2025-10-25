@@ -57,7 +57,7 @@ try {
 
     firebaseAdmin = admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
-      projectId: process.env.FIREBASE_PROJECT_ID || serviceAccount.project_id
+      projectId: serviceAccount.project_id // Use the project ID from service account
     });
     
     messaging = admin.messaging();
