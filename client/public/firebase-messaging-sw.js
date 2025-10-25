@@ -2,6 +2,17 @@
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
+// SERVICE WORKER VERSION - Update this to force cache refresh
+const SW_VERSION = '2.0.0';
+console.log('[SW] Service Worker Version:', SW_VERSION);
+
+// HARD-CODED DEPLOYED URLS - NEVER USE LOCALHOST IN PRODUCTION
+const DEPLOYED_URLS = {
+  PRIMARY: 'https://event-monitor.askarthikey.tech',
+  SECONDARY: 'https://event-monitoring-omega.vercel.app',
+  LOCAL: 'http://localhost:5173'
+};
+
 // Firebase configuration will be received from main thread
 let firebaseConfig = null;
 let messaging = null;
@@ -23,68 +34,42 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// Get the correct base URL for the client
+// Get the correct base URL for the client - ALWAYS PREFER DEPLOYED OVER LOCALHOST
 function getClientBaseUrl() {
-  // ALWAYS prioritize deployed sites over localhost
   const hostname = self.location.hostname;
   
-  console.log('[SW] Detecting hostname:', hostname);
-  console.log('[SW] Full location:', self.location.href);
-  console.log('[SW] Current origin from main thread:', currentOrigin);
-  console.log('[SW] Client origins from env:', clientOrigins);
+  console.log('[SW] ===== URL DETECTION START =====');
+  console.log('[SW] Hostname:', hostname);
+  console.log('[SW] Location:', self.location.href);
   
-  // First priority: Use currentOrigin if it's a deployed URL (not localhost)
-  if (currentOrigin && !currentOrigin.includes('localhost')) {
-    console.log('[SW] Using current origin (deployed):', currentOrigin);
-    return currentOrigin;
+  // Check if we're actually running on localhost
+  const isLocalhost = hostname === 'localhost' || 
+                     hostname === '127.0.0.1' || 
+                     hostname === '0.0.0.0';
+  
+  console.log('[SW] Is Localhost:', isLocalhost);
+  
+  // If we're on localhost, use local URL
+  if (isLocalhost) {
+    console.log('[SW] ✅ Using LOCALHOST URL');
+    return DEPLOYED_URLS.LOCAL;
   }
   
-  // Second priority: Match hostname with deployed domains (custom domain first)
+  // If hostname contains custom domain, use it
   if (hostname.includes('askarthikey.tech')) {
-    console.log('[SW] Detected custom domain deployment (priority)');
-    return 'https://event-monitor.askarthikey.tech';
+    console.log('[SW] ✅ Using CUSTOM DOMAIN (askarthikey.tech)');
+    return DEPLOYED_URLS.PRIMARY;
   }
   
-  if (hostname.includes('vercel.app')) {
-    console.log('[SW] Detected Vercel deployment');
-    return 'https://event-monitoring-omega.vercel.app';
+  // If hostname contains vercel, use vercel URL
+  if (hostname.includes('vercel.app') || hostname.includes('event-monitoring-omega')) {
+    console.log('[SW] ✅ Using VERCEL URL');
+    return DEPLOYED_URLS.SECONDARY;
   }
   
-  // Third priority: Parse client origins for deployed URLs
-  if (clientOrigins) {
-    const originsArray = clientOrigins.split(',').map(o => o.trim());
-    console.log('[SW] Available origins:', originsArray);
-    
-    // Find any deployed URL (not localhost)
-    for (const origin of originsArray) {
-      if (!origin.includes('localhost') && (origin.includes('https://') || origin.includes('http://'))) {
-        console.log('[SW] Using first deployed origin:', origin);
-        return origin;
-      }
-    }
-  }
-  
-  // Fourth priority: Hard-coded deployed URLs (safety net) - custom domain first
-  if (!hostname.includes('localhost') && !hostname.includes('127.0.0.1')) {
-    if (hostname.includes('askarthikey')) {
-      console.log('[SW] Fallback to custom domain URL (priority)');
-      return 'https://event-monitor.askarthikey.tech';
-    }
-    if (hostname.includes('vercel') || hostname.includes('event-monitoring')) {
-      console.log('[SW] Fallback to Vercel URL');
-      return 'https://event-monitoring-omega.vercel.app';
-    }
-  }
-  
-  // LAST resort: Only use localhost if we're actually on localhost
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    console.log('[SW] Using localhost (development mode)');
-    return 'http://localhost:5173';
-  }
-  
-  // Ultimate fallback: Use first deployed URL (custom domain priority)
-  console.log('[SW] Ultimate fallback to custom domain URL');
-  return 'https://event-monitor.askarthikey.tech';
+  // DEFAULT: Always use primary deployed URL for any other case
+  console.log('[SW] ✅ Using DEFAULT DEPLOYED URL (custom domain)');
+  return DEPLOYED_URLS.PRIMARY;
 }
 
 // Initialize Firebase
@@ -120,14 +105,13 @@ function setupBackgroundMessageHandler() {
   
   // Handle background messages
   messaging.onBackgroundMessage((payload) => {
-    console.log('[SW] Received background message:', payload);
-    console.log('[SW] Payload data:', payload.data);
+    console.log('[SW] ===== BACKGROUND MESSAGE RECEIVED =====');
+    console.log('[SW] Payload:', payload);
     
-    // Determine the correct URL for this notification
-    const deployedUrl = payload.data?.forceDeployedUrl || 
-                       getClientBaseUrl();
+    // ALWAYS use the detected URL based on where service worker is running
+    const targetUrl = getClientBaseUrl();
     
-    console.log('[SW] Using deployed URL for notification:', deployedUrl);
+    console.log('[SW] Target URL for notification:', targetUrl);
     
     const notificationTitle = payload.notification?.title || 'AI Event Monitor Alert';
     const notificationOptions = {
@@ -137,9 +121,9 @@ function setupBackgroundMessageHandler() {
       tag: 'ai-event-notification',
       data: {
         ...payload.data,
-        clientOrigins: clientOrigins,
-        currentOrigin: deployedUrl, // Use deployed URL
-        forceDeployedUrl: payload.data?.forceDeployedUrl || 'https://event-monitor.askarthikey.tech'
+        targetUrl: targetUrl, // Store the target URL
+        deployedUrl: DEPLOYED_URLS.PRIMARY, // Always store primary as backup
+        timestamp: Date.now()
       },
       actions: [
         {
@@ -156,72 +140,66 @@ function setupBackgroundMessageHandler() {
       vibrate: [200, 100, 200]
     };
 
-    console.log('[SW] Notification options data:', notificationOptions.data);
+    console.log('[SW] Notification data being stored:', notificationOptions.data);
     self.registration.showNotification(notificationTitle, notificationOptions);
   });
 }
 
 // Handle notification click events
 self.addEventListener('notificationclick', (event) => {
-  console.log('[firebase-messaging-sw.js] Notification click received.');
-  console.log('[SW] Notification data:', event.notification.data);
+  console.log('[SW] ===== NOTIFICATION CLICKED =====');
+  console.log('[SW] Event data:', event.notification.data);
 
   event.notification.close();
 
-  // Get the base URL with multiple fallbacks, NEVER use localhost for deployed notifications
-  let baseUrl = null;
+  // Determine the URL to open
+  let targetUrl = null;
   
-  // Priority 1: Use forceDeployedUrl from server (always deployed URL)
-  if (event.notification.data?.forceDeployedUrl) {
-    baseUrl = event.notification.data.forceDeployedUrl;
-    console.log('[SW] Using forced deployed URL:', baseUrl);
+  // Priority 1: Use targetUrl from notification data
+  if (event.notification.data?.targetUrl) {
+    targetUrl = event.notification.data.targetUrl;
+    console.log('[SW] Using stored targetUrl:', targetUrl);
   }
-  // Priority 2: Use currentOrigin if it's not localhost
-  else if (event.notification.data?.currentOrigin && !event.notification.data.currentOrigin.includes('localhost')) {
-    baseUrl = event.notification.data.currentOrigin;
-    console.log('[SW] Using current origin (non-localhost):', baseUrl);
+  // Priority 2: Use forceDeployedUrl from server
+  else if (event.notification.data?.forceDeployedUrl) {
+    targetUrl = event.notification.data.forceDeployedUrl;
+    console.log('[SW] Using forceDeployedUrl:', targetUrl);
   }
-  // Priority 3: Parse clientOrigins for deployed URLs
-  else if (event.notification.data?.clientOrigins) {
-    const origins = event.notification.data.clientOrigins.split(',').map(o => o.trim());
-    for (const origin of origins) {
-      if (!origin.includes('localhost')) {
-        baseUrl = origin;
-        console.log('[SW] Using client origin (non-localhost):', baseUrl);
-        break;
-      }
-    }
+  // Priority 3: Use deployedUrl backup
+  else if (event.notification.data?.deployedUrl) {
+    targetUrl = event.notification.data.deployedUrl;
+    console.log('[SW] Using deployedUrl backup:', targetUrl);
+  }
+  // Priority 4: Detect based on current SW location
+  else {
+    targetUrl = getClientBaseUrl();
+    console.log('[SW] Detected URL from SW location:', targetUrl);
   }
   
-  // Priority 4: Use getClientBaseUrl() but ensure it's not localhost
-  if (!baseUrl) {
-    baseUrl = getClientBaseUrl();
-    if (baseUrl.includes('localhost')) {
-      baseUrl = 'https://event-monitor.askarthikey.tech'; // Force custom domain as priority
-      console.log('[SW] Forced custom domain URL as fallback:', baseUrl);
-    }
+  // SAFETY CHECK: If somehow localhost is in the URL and we're not on localhost, force deployed URL
+  const currentHostname = self.location.hostname;
+  const isActuallyLocalhost = currentHostname === 'localhost' || 
+                              currentHostname === '127.0.0.1';
+  
+  if (targetUrl.includes('localhost') && !isActuallyLocalhost) {
+    console.log('[SW] ⚠️ LOCALHOST DETECTED BUT NOT ON LOCALHOST - FORCING DEPLOYED URL');
+    targetUrl = DEPLOYED_URLS.PRIMARY;
   }
 
-  console.log('[SW] Final base URL for navigation:', baseUrl);
+  console.log('[SW] ✅ FINAL TARGET URL:', targetUrl);
 
+  // Build the full URL
+  let fullUrl;
   if (event.action === 'view') {
-    // Open the app to the specific event
     const eventId = event.notification.data?.eventId;
-    const url = eventId ? `${baseUrl}/events/${eventId}/chat` : `${baseUrl}/events`;
-    
-    console.log('[SW] Opening URL:', url);
-    event.waitUntil(
-      clients.openWindow(url)
-    );
-  } else if (event.action === 'dismiss') {
-    // Just close the notification
-    return;
+    fullUrl = eventId ? `${targetUrl}/events/${eventId}/chat` : `${targetUrl}/events`;
   } else {
-    // Default action - open the app
-    const url = `${baseUrl}/events`;
-    console.log('[SW] Opening default URL:', url);
-    event.waitUntil(
-      clients.openWindow(url)
-    );
+    fullUrl = `${targetUrl}/events`;
   }
+  
+  console.log('[SW] 🌐 Opening URL:', fullUrl);
+  
+  event.waitUntil(
+    clients.openWindow(fullUrl)
+  );
 });
