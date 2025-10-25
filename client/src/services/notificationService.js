@@ -53,13 +53,33 @@ class NotificationService {
 	// Register service worker
 	async registerServiceWorker() {
 		try {
+			// FIRST: Unregister all old service workers
+			console.log('🧹 Checking for old service workers...');
+			const existingRegistrations = await navigator.serviceWorker.getRegistrations();
+			for (const reg of existingRegistrations) {
+				// Unregister old Firebase messaging service workers without version
+				if (reg.active?.scriptURL.includes('firebase-messaging-sw.js') && 
+				    !reg.active?.scriptURL.includes('v=2.0.1')) {
+					console.log('🗑️ Unregistering old service worker:', reg.scope);
+					await reg.unregister();
+				}
+			}
+			
+			// Wait a moment for cleanup
+			await new Promise(resolve => setTimeout(resolve, 500));
+			
 			// Add cache-busting parameter to force reload of service worker
 			const swVersion = '2.0.1'; // Match SW_VERSION in firebase-messaging-sw.js
 			const registration = await navigator.serviceWorker.register(
 				`/firebase-messaging-sw.js?v=${swVersion}`,
-				{ updateViaCache: 'none' } // Force check for updates
+				{ 
+					updateViaCache: 'none', // Force check for updates
+					scope: '/' // Use root scope to override Firebase default scope
+				}
 			);
-			console.log("Service Worker registered successfully:", registration);
+			console.log("✅ Service Worker registered successfully:", registration);
+			console.log("✅ Service Worker scope:", registration.scope);
+			console.log("✅ Service Worker script:", registration.active?.scriptURL);
 			
 			// Force immediate update check
 			await registration.update();
