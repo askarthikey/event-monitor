@@ -79,10 +79,11 @@ class ApiService {
   }
 
   async createEvent(formData) {
-    return this.fetchWithAuth('/api/events', {
+    const token = localStorage.getItem('token');
+    return fetch(this.getURL('/api/events'), {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`
+        Authorization: `Bearer ${token}`
       },
       body: formData
     });
@@ -101,10 +102,11 @@ class ApiService {
   }
 
   async updateCCTVVideo(eventId, formData) {
-    return this.fetchWithAuth(`/api/events/${eventId}/cctv-video`, {
+    const token = localStorage.getItem('token');
+    return fetch(this.getURL(`/api/events/${eventId}/cctv-video`), {
       method: 'PUT',
       headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`
+        Authorization: `Bearer ${token}`
       },
       body: formData
     });
