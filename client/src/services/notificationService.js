@@ -53,38 +53,29 @@ class NotificationService {
 	// Register service worker
 	async registerServiceWorker() {
 		try {
-			// FIRST: Unregister all old service workers
-			console.log('🧹 Checking for old service workers...');
+			console.log('Checking for old service workers...');
 			const existingRegistrations = await navigator.serviceWorker.getRegistrations();
 			for (const reg of existingRegistrations) {
-				// Unregister old Firebase messaging service workers without current version
 				if (reg.active?.scriptURL.includes('firebase-messaging-sw.js') && 
 				    !reg.active?.scriptURL.includes('v=2.1.0')) {
-					console.log('🗑️ Unregistering old service worker:', reg.scope);
+					console.log('Unregistering old service worker:', reg.scope);
 					await reg.unregister();
 				}
 			}
 			
-			// Wait a moment for cleanup
 			await new Promise(resolve => setTimeout(resolve, 500));
 			
-			// Add cache-busting parameter to force reload of service worker
-			const swVersion = '2.1.0'; // Match SW_VERSION in firebase-messaging-sw.js
+			const swVersion = '2.1.0';
 			const registration = await navigator.serviceWorker.register(
 				`/firebase-messaging-sw.js?v=${swVersion}`,
 				{ 
-					updateViaCache: 'none', // Force check for updates
-					scope: '/' // Use root scope to override Firebase default scope
+					updateViaCache: 'none',
+					scope: '/'
 				}
 			);
-			console.log("✅ Service Worker registered successfully:", registration);
-			console.log("✅ Service Worker scope:", registration.scope);
-			console.log("✅ Service Worker script:", registration.active?.scriptURL);
+			console.log("Service Worker registered successfully");
 			
-			// Force immediate update check
 			await registration.update();
-			
-			// Send Firebase config to service worker
 			await this.sendConfigToServiceWorker(registration);
 			
 			return registration;
@@ -97,7 +88,6 @@ class NotificationService {
 	// Send Firebase configuration to service worker
 	async sendConfigToServiceWorker(registration) {
 		try {
-			// Get Firebase config from environment variables
 			const firebaseConfig = {
 				apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
 				authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -108,18 +98,11 @@ class NotificationService {
 				measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 			};
 
-			// Get the correct client origins for notifications (support multiple domains)
 			const clientOrigins = import.meta.env.VITE_CLIENT_ORIGIN || 'https://event-monitoring-omega.vercel.app,https://event-monitor.askarthikey.tech';
 			const currentOrigin = window.location.origin;
 
-			console.log('🔧 Sending Firebase config to service worker:', firebaseConfig.projectId);
-			console.log('🌐 Supported client origins:', clientOrigins);
-			console.log('🌐 Current origin:', currentOrigin);
-
-			// Wait for service worker to be ready
 			await registration.update();
 			
-			// Send config to service worker with client origins
 			const configMessage = {
 				type: 'FIREBASE_CONFIG',
 				config: firebaseConfig,
@@ -129,22 +112,18 @@ class NotificationService {
 			
 			if (registration.active) {
 				registration.active.postMessage(configMessage);
-				console.log('✅ Firebase config and client origins sent to service worker');
 			} else {
-				console.warn('⚠️ Service worker not active, config will be sent when ready');
-				// Listen for service worker to become active
 				registration.addEventListener('updatefound', () => {
 					const newWorker = registration.installing;
 					newWorker?.addEventListener('statechange', () => {
 						if (newWorker.state === 'activated') {
 							newWorker.postMessage(configMessage);
-							console.log('✅ Firebase config and client origins sent to newly activated service worker');
 						}
 					});
 				});
 			}
 		} catch (error) {
-			console.error('❌ Error sending config to service worker:', error);
+			console.error('Error sending config to service worker:', error);
 		}
 	}
 
@@ -174,19 +153,15 @@ class NotificationService {
 		}
 
 		try {
-			// Get the service worker registration we just created
 			const registration = await navigator.serviceWorker.getRegistration('/');
 			if (!registration) {
 				console.error("No service worker registration found!");
 				return null;
 			}
 			
-			console.log("🔧 Using service worker registration:", registration.scope);
-			
-			// Get token using OUR service worker registration (prevents Firebase from creating its own)
 			const currentToken = await getToken(messaging, { 
 				vapidKey,
-				serviceWorkerRegistration: registration // KEY: Use our existing registration!
+				serviceWorkerRegistration: registration
 			});
 			
 			if (currentToken) {
@@ -200,9 +175,7 @@ class NotificationService {
 				const registrationSuccess = await this.sendTokenToServer(currentToken);
 
 				if (registrationSuccess) {
-					console.log("✅ User successfully registered for notifications");
-				} else {
-					console.log("⚠️ Token obtained but registration failed");
+					console.log("User successfully registered for notifications");
 				}
 
 				return currentToken;
@@ -231,20 +204,17 @@ class NotificationService {
 
 			if (response.ok) {
 				const data = await response.json();
-				console.log("✅ Successfully registered for notifications:", data);
+				console.log("Successfully registered for notifications");
 
-				// Check if this is the first time enabling notifications
 				const hasShownWelcome = localStorage.getItem("notifications_welcome_shown");
 				
-				// Show a success notification to user only on first time
 				if (Notification.permission === "granted" && !hasShownWelcome) {
 					new Notification("🔔 Notifications Enabled!", {
-						body: "Notifications enabled only once for first time. You will now receive AI event alerts even when the website is closed.",
+						body: "You will now receive AI event alerts even when the website is closed.",
 						icon: "/favicon.ico",
 						tag: "registration-success",
 					});
 					
-					// Mark that we've shown the welcome notification
 					localStorage.setItem("notifications_welcome_shown", "true");
 				}
 
@@ -297,12 +267,9 @@ class NotificationService {
 
 			browserNotification.onclick = () => {
 				window.focus();
-				// Get the correct client origin
 				const clientOrigin = import.meta.env.VITE_CLIENT_ORIGIN || window.location.origin;
 				
-				// Navigate to specific event if eventId is provided
 				if (data?.eventId) {
-					// For foreground notifications, we can use relative paths since we're in the same origin
 					window.location.href = `/events/${data.eventId}/chat`;
 				} else {
 					window.location.href = "/events";
@@ -310,7 +277,6 @@ class NotificationService {
 				browserNotification.close();
 			};
 
-			// Auto close after 10 seconds
 			setTimeout(() => {
 				browserNotification.close();
 			}, 10000);
@@ -402,10 +368,8 @@ class NotificationService {
 	// Force re-registration (useful for debugging or refreshing token)
 	async forceRegister() {
 		if (this.token) {
-			console.log("🔄 Force re-registering current token...");
 			return await this.sendTokenToServer(this.token);
 		} else {
-			console.log("🔄 No token available, initializing notifications...");
 			return await this.init();
 		}
 	}
@@ -413,28 +377,22 @@ class NotificationService {
 	// Force service worker update and reconfiguration
 	async forceServiceWorkerUpdate() {
 		try {
-			console.log("🔄 Forcing service worker update...");
+			console.log("Forcing service worker update...");
 			
-			// Unregister existing service worker
 			const registrations = await navigator.serviceWorker.getRegistrations();
 			for (const registration of registrations) {
 				if (registration.scope.includes('firebase-messaging-sw.js') || 
 					registration.active?.scriptURL.includes('firebase-messaging-sw.js')) {
-					console.log("🗑️ Unregistering existing Firebase service worker");
 					await registration.unregister();
 				}
 			}
 
-			// Wait a bit for cleanup
 			await new Promise(resolve => setTimeout(resolve, 1000));
-
-			// Re-register service worker
 			await this.registerServiceWorker();
 			
-			console.log("✅ Service worker force updated successfully");
 			return true;
 		} catch (error) {
-			console.error("❌ Error force updating service worker:", error);
+			console.error("Error force updating service worker:", error);
 			return false;
 		}
 	}
